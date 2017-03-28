@@ -2,17 +2,18 @@
 
 Java has a lot of different ways to represent a stream of bytes.  Depending on the author and age of a library, it might use `byte[]`, `InputStream`, `ByteBuffer`, or `ReadableByteChannel`.  If the bytes represent strings, there's also `String`, `Reader`, and `CharSequence` to worry about.  Remembering how to convert between all of them is a thankless task, made that much worse by libraries which define their own custom representations, or composing them with Clojure's lazy sequences and stream representations.
 
-This library is a Rosetta stone for all the byte representations Java has to offer, and gives you the freedom to forget all the APIs you never wanted to know in the first place.  Complete documentation can be found [here](http://aleph.io/codox/byte-streams/).
+这个库是一个工具集合，可以让你忘记那些乱七八糟的api
+完整的文档地址[这里](http://aleph.io/codox/byte-streams/)
 
-### usage
+### 使用
 
 ```clj
 [byte-streams "0.2.2"]
 ```
 
-### converting types
+### 类型转换
 
-To convert one byte representation to another, use `byte-streams/convert`:
+使用`byte-streams/convert`，从一种类型转换成另外一种
 
 ```clj
 byte-streams> (convert "abcd" java.nio.ByteBuffer)
@@ -21,7 +22,9 @@ byte-streams> (convert *1 String)
 "abcd"
 ```
 
-`(convert data to-type options?)` converts, if possible, the data from its current type to the destination type.  This destination type can either be a Java class or a Clojure protocol.  However, since there's no direct route from a string to a byte-buffer, under the covers `convert` is doing whatever it takes to get the desired type:
+调用`(convert data to-type options?)`来转换，如果可能，从当前类型转换为目的类型。
+目的类型可以是Java类或者是一个Clojure协议。
+因为没有直接的方法来从String转化成byte-buffer，可以使用`convert`来实现：
 
 ```clj
 byte-streams> (conversion-path String java.nio.ByteBuffer)
@@ -29,16 +32,19 @@ byte-streams> (conversion-path String java.nio.ByteBuffer)
  [[B java.nio.ByteBuffer])
 ```
 
-While we can't turn a string into a `ByteBuffer`, we can turn a string into a `byte[]`, and `byte[]` into a `ByteBuffer`.  When invoked, `convert` will choose the minimal path along the graph of available conversions.  Common conversions are exposed via `to-byte-buffer`, `to-byte-buffers`, `to-byte-array`, `to-input-stream`, `to-readable-channel`, `to-char-sequence`, `to-string`, and `to-line-seq`.
+我们不是直接把string转换成`ByteBuffer`，我们可先转换成`byte[]`然后从`byte[]`到`ByteBuffer`
+调用方法会选择最小的路径来转换的。
+通常的方法有`to-byte-buffer`,`to-byte-buffers`,`to-byte-array`,`to-input-stream`,
+`to-readable-channel`,`to-char-sequence`,`to-string`和`to-line-seq`
 
-Every type can exist either by itself, or as a sequence.  For instance, we can create an `InputStream` representing an infinite number of repeated strings:
+任何类型都可以存在，甚至是一个序列。例如我们可以创建一个`InputStream`的无限序列
 
 ```clj
 byte-stream> (to-input-stream (repeat "hello"))
 #<InputStream byte_streams.InputStream@3962a02c>
 ```
 
-And then we can turn that into a lazy sequence of `ByteBuffers`:
+然后我们转化成一个惰性的`ByteBuffers`：
 
 ```clj
 byte-streams> (take 2
@@ -49,20 +55,21 @@ byte-streams> (take 2
  #<HeapByteBuffer java.nio.HeapByteBuffer[pos=0 lim=128 cap=128]>)
 ```
 
-Notice that we describe a sequence of a type as `(seq-of type)`, and that we've passed a map to `convert` describing the size of the `ByteBuffers` we want to create.  Available options include:
+注意我们使用`(seq-of type)`来描述序列，并且使用一个map来描述可选项：
 
-* `:chunk-size` - the size in bytes of each chunk when converting a stream into a lazy seq of discrete chunks, defaults to `4096`
-* `:direct?` - whether any `ByteBuffers` which are created should be [direct](http://stackoverflow.com/a/5671880/228387), defaults to `false`
-* `:encoding` - the character set for any strings we're encoding or decoding, defaults to `"UTF-8"`
+* `:chunk-size` - 每次转化的块大小, 默认`4096`
+* `:direct?` - `ByteBuffers`可以直接转化，具体看[direct](http://stackoverflow.com/a/5671880/228387),默认是`false`
+* `:encoding` - 编码方法, 默认是`"UTF-8"`
 
-To create a [Manifold stream](https://github.com/ztellman/manifold), use `(stream-of type)`.  To convert a core.async channel, convert it using `manifold.stream/->source`.
+创建一个[Manifold stream](https://github.com/ztellman/manifold), 使用`(stream-of type)`。
+转化core.async channel, 使用 `manifold.stream/->source`。
 
-### custom conversions
+### 定制转化
 
-While there are conversions defined for all common byte types, this can be extended to other libraries via `byte-streams/def-conversion`:
+以上是一些通用的字节类型转化，通过`byte-streams/def-conversion`来定制扩展。
 
 ```clj
-;; a conversion from byte-buffers to my-byte-representation
+;; 一个从byte-buffers到my-byte-representation的转化
 (def-conversion [ByteBuffer MyByteRepresentation]
   [buf options]
   (buffer->my-representation buf options))
@@ -71,11 +78,12 @@ While there are conversions defined for all common byte types, this can be exten
 (convert "abc" MyByteRepresentation)
 ```
 
-This mechanism can even be used for types unrelated to byte streams, if you're feeling adventurous.
+这个可以定制任何转化机制，只要觉得可行。
 
-### transfers
+### 传输
 
-Simple conversions are useful, but sometimes we'll need to do more than just keep the bytes in memory.  When you need to write bytes to a file, network socket, or other endpoints, you can use `byte-streams/transfer`.
+简答的转化非常好用，但是有时我们需要保存更多的字节到内存中。
+当你需要写一些字节到文件中时，socket，或者其他终端，你可以使用`byte-streams/transfer`
 
 ```clj
 byte-streams> (def f (File. "/tmp/salutations"))
@@ -86,7 +94,7 @@ byte-streams> (to-string f)
 "hello"
 ```
 
-`(transfer source sink options?)` allows you pipe anything that can produce bytes into anything that can receive bytes, using the most efficient mechanism available.  Custom transfer mechanisms can also be defined:
+`(transfer source sink options?)` 允许你管道化任何东西。也可以定制：
 
 ```clj
 (def-transfer [InputStream MyByteSink]
@@ -94,9 +102,9 @@ byte-streams> (to-string f)
   (send-stream-to-my-sink stream sink))
 ```
 
-### some utilities
+### 工具函数
 
-`byte-streams/print-bytes` will print both hexadecimal and ascii representations of a collection of bytes:
+`byte-streams/print-bytes` 会打印16禁止和ascii码
 
 ```clj
 byte-streams> (print-bytes (-> #'print-bytes meta :doc))
@@ -107,16 +115,16 @@ byte-streams> (print-bytes (-> #'print-bytes meta :doc))
 79 74 65 73 20 70 65 72  20 6C 69 6E 65 2E            ytes per line.
 ```
 
-`(byte-streams/compare-bytes a b)` will return a value which is positive if `a` is lexicographically first, zero if they're equal, and negative otherwise:
+`(byte-streams/compare-bytes a b)` 比较两个字节是否相同
 
 ```clj
 byte-streams> (compare-bytes "abc" "abd")
 -1
 ```
 
-`bytes-streams/bytes=` will return true if two byte streams are equal, and false otherwise.
+`bytes-streams/bytes=` 比较字节是否相等
 
-`byte-streams/conversion-path` returns all the intermediate steps in transforming one type to another, if one exists:
+`byte-streams/conversion-path` 返回转化路径:
 
 ```clj
 ;; each element is a conversion tuple of to/from
@@ -130,14 +138,14 @@ byte-streams> (conversion-path java.io.OutputStream java.io.InputStream)
 nil
 ```
 
-`byte-streams/possible-conversions` returns a list of possible conversion targets for a type.
+`byte-streams/possible-conversions` 类型可以转化的目的类型列表.
 
 ```clj
 byte-streams> (possible-conversions String)
 (java.lang.String java.io.InputStream java.nio.DirectByteBuffer java.nio.ByteBuffer (seq-of java.nio.ByteBuffer) java.io.Reader java.nio.channels.ReadableByteChannel [B java.lang.CharSequence)
 ```
 
-`byte-streams/optimized-transfer?` returns true if there is an optimized transfer method for two types:
+`byte-streams/optimized-transfer?` 返回两个类型是否有转化的方式:
 
 ```clj
 byte-streams> (optimized-transfer? String java.io.File)
